@@ -61,7 +61,7 @@ func getCreds(filepath string) (string, string, error) {
 
 // Handler for home page
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	t, err := template.ParseFiles("/Users/blobdon/code/go/src/github.com/blobdon/gomgraph/tpl/connect.html")
+	t, err := template.ParseFiles("/Users/blobdon/code/go/src/github.com/blobdon/go-connect-rest-sample/tpl/connect.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -115,7 +115,14 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 // @app.route('/logout')
 // def logout():
-//     """Handler for logout route."""
+// Handler for logout route
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	// reset client to forget token
+	client = http.DefaultClient
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+	return
+}
+
 //     session.pop('microsoft_token', None)
 //     session.pop('state', None)
 //     return redirect(url_for('index'))
@@ -141,7 +148,7 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 		log.Println("Failed to parse user data:", err)
 	}
 
-	t, err := template.ParseFiles("/Users/blobdon/code/go/src/github.com/blobdon/gomgraph/tpl/main.html")
+	t, err := template.ParseFiles("/Users/blobdon/code/go/src/github.com/blobdon/go-connect-rest-sample/tpl/main.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusSeeOther)
 	}
@@ -227,13 +234,14 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	var err error
-	clientID, clientSecret, err = getCreds("/Users/blobdon/code/go/src/github.com/blobdon/gomgraph/private.txt")
+	clientID, clientSecret, err = getCreds("/Users/blobdon/code/go/src/github.com/blobdon/go-connect-rest-sample/private.txt")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/main", mainHandler)
 	http.ListenAndServe(":8080", nil)
 	fmt.Println("Success", client.Head)
