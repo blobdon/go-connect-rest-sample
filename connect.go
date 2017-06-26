@@ -68,14 +68,8 @@ func getCreds(filepath string) (string, string, error) {
 		err := errors.New("Missing Configuration: _PRIVATE.txt needs to be edited to add client ID and secret")
 		return "", "", err
 	}
-	// if err := scanner.Err(); err != nil {
-	// 	log.Fatal(err)
-	// }
 	return id, secret, err
 }
-
-// # since this sample runs locally without HTTPS, disable InsecureRequestWarning
-// requests.packages.urllib3.disable_warnings()
 
 // Handler for home page
 func indexHandler(w http.ResponseWriter, r *http.Request) {
@@ -105,12 +99,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var code string
 	code = r.URL.Query().Get("code")
-	fmt.Println("First Code", len(code), code, code == "")
 	if len(code) == 0 {
 		// Redirect user to consent page to ask for permission
 		// for the scopes specified above.
 		authurl := conf.AuthCodeURL(guid, oauth2.AccessTypeOffline)
-		fmt.Printf("Visit the URL for the auth dialog: %v", authurl)
 		http.Redirect(w, r, authurl, http.StatusSeeOther)
 		return
 	}
@@ -120,7 +112,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		// reset state to prevent re-use
 		guid = ""
 	}
-	fmt.Println("Second Code", len(code), code)
 	ctx := context.Background()
 	tok, err := conf.Exchange(ctx, code)
 	if err != nil {
@@ -131,8 +122,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-// @app.route('/logout')
-// def logout():
 // Handler for logout route
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	// reset client to forget token
@@ -141,18 +130,6 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-//     session.pop('microsoft_token', None)
-//     session.pop('state', None)
-//     return redirect(url_for('index'))
-
-// def authorized():
-//     response = msgraphapi.authorized_response()
-
-//     if response is None:
-//         return "Access Denied: Reason={0}\nError={1}".format( \
-//             request.args['error'], request.args['error_description'])
-
-// @app.route('/main')
 // Handler for main route
 func mainHandler(w http.ResponseWriter, r *http.Request) {
 	res, err := client.Get("https://graph.microsoft.com/v1.0/me")
