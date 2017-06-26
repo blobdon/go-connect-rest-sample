@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ var (
 	clientID     string
 	clientSecret string
 	guid         string
+	user         User
 )
 
 // data for template
@@ -28,6 +30,22 @@ type D map[string]interface{}
 type User struct {
 	Username string `json:"displayName"`
 	Email    string `json:"mail"`
+}
+
+type Body struct {
+	ContentType string
+	Content     string
+}
+type EmailAddress struct {
+	Address string
+}
+type Recipient struct {
+	EmailAddress EmailAddress
+}
+type Message struct {
+	Subject      string
+	Body         Body
+	ToRecipients []Recipient
 }
 
 // # read private credentials from text file
@@ -137,13 +155,12 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 // @app.route('/main')
 // Handler for main route
 func mainHandler(w http.ResponseWriter, r *http.Request) {
-	me := User{}
 	res, err := client.Get("https://graph.microsoft.com/v1.0/me")
 	if err != nil {
 		log.Println("Failed to get user/me:", err)
 	}
 	defer res.Body.Close()
-	err = json.NewDecoder(res.Body).Decode(&me)
+	err = json.NewDecoder(res.Body).Decode(&user)
 	if err != nil {
 		log.Println("Failed to parse user data:", err)
 	}
@@ -153,84 +170,73 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusSeeOther)
 	}
 	t.Execute(w, D{
-		"me":          me,
+		"me":          user,
 		"showSuccess": false,
 		"showError":   false,
 	})
 }
 
-// def main():
-//     if session['alias']:
-//         username = session['alias']
-//         email_address = session['userEmailAddress']
-//         return render_template('main.html', name=username, emailAddress=email_address)
-//     else:
-//         return render_template('main.html')
+// Handler for sendmail route
+func sendMailHandler(w http.ResponseWriter, r *http.Request) {
+	// Create the email to be sent via the Graph API
+	var emailBody bytes.Buffer
+	t, err := template.ParseFiles("/Users/blobdon/code/go/src/github.com/blobdon/go-connect-rest-sample/tpl/email.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	t.Execute(&emailBody, user.Username)
+	// Gather and encode payload data for posting email message to graph
+	recip := Recipient{}
+	recip.EmailAddress.Address = r.URL.Query().Get("emailAddress")
+	recips := []Recipient{recip}
+	msg := D{
+		"Message": Message{
+			Subject: "Welcome to the Microsoft Graph Connect sample for Python",
+			Body: Body{
+				ContentType: "HTML",
+				Content:     emailBody.String(),
+			},
+			ToRecipients: recips,
+		},
+	}
+	postJSON := new(bytes.Buffer)
+	err = json.NewEncoder(postJSON).Encode(msg)
+	if err != nil {
+		fmt.Println("error encoding msg to json:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 
-// @app.route('/send_mail')
-// def send_mail():
-//     """Handler for send_mail route."""
-//     email_address = request.args.get('emailAddress') # get email address from the form
-//     response = call_sendmail_endpoint(session['access_token'], session['alias'], email_address)
-//     if response == 'SUCCESS':
-//         show_success = 'true'
-//         show_error = 'false'
-//     else:
-//         print(response)
-//         show_success = 'false'
-//         show_error = 'true'
+	// Post the message to the graph API endpoint for sending email
+	endpointURL := "https://graph.microsoft.com/v1.0/me/sendMail"
+	res, err := client.Post(endpointURL, "application/json", postJSON)
+	if err != nil {
+		fmt.Println("error posting msg:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 
-//     session['pageRefresh'] = 'false'
-//     return render_template('main.html', name=session['alias'],
-//                            emailAddress=email_address, showSuccess=show_success,
-//                            showError=show_error)
+	// Parse template for response to app client
+	t2, err := template.ParseFiles("/Users/blobdon/code/go/src/github.com/blobdon/go-connect-rest-sample/tpl/main.html")
+	if err != nil {
+		fmt.Println("Error parsing template:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 
-// # If library is having trouble with refresh, uncomment below and implement
-// # refresh handler see https://github.com/lepture/flask-oauthlib/issues/160 for
-// # instructions on how to do this. Implements refresh token logic.
-// # @app.route('/refresh', methods=['POST'])
-// # def refresh():
-// @msgraphapi.tokengetter
-// def get_token():
-//     """Return the Oauth token."""
-//     return session.get('microsoft_token')
-
-// def call_sendmail_endpoint(access_token, name, email_address):
-//     """Call the resource URL for the sendMail action."""
-//     send_mail_url = 'https://graph.microsoft.com/v1.0/me/microsoft.graph.sendMail'
-
-// 	# set request headers
-//     headers = {'User-Agent' : 'python_tutorial/1.0',
-//                'Authorization' : 'Bearer {0}'.format(access_token),
-//                'Accept' : 'application/json',
-//                'Content-Type' : 'application/json'}
-
-// 	# Use these headers to instrument calls. Makes it easier to correlate
-//     # requests and responses in case of problems and is a recommended best
-//     # practice.
-//     request_id = str(uuid.uuid4())
-//     instrumentation = {'client-request-id' : request_id,
-//                        'return-client-request-id' : 'true'}
-//     headers.update(instrumentation)
-
-// 	# Create the email that is to be sent via the Graph API
-//     email = {'Message': {'Subject': 'Welcome to the Microsoft Graph Connect sample for Python',
-//                          'Body': {'ContentType': 'HTML',
-//                                   'Content': render_template('email.html', name=name)},
-//                          'ToRecipients': [{'EmailAddress': {'Address': email_address}}]
-//                         },
-//              'SaveToSentItems': 'true'}
-
-//     response = requests.post(url=send_mail_url,
-//                              headers=headers,
-//                              data=json.dumps(email),
-//                              verify=False,
-//                              params=None)
-
-//     if response.ok:
-//         return 'SUCCESS'
-//     else:
-//         return '{0}: {1}'.format(response.status_code, response.text)
+	// Graph API will respond with 202 if sendmail request was successful
+	if res.StatusCode == 202 {
+		t2.Execute(w, D{
+			"me":          user,
+			"showSuccess": true,
+			"showError":   false,
+			"recipient":   recip.EmailAddress.Address,
+		})
+	} else {
+		t2.Execute(w, D{
+			"me":          user,
+			"showSuccess": false,
+			"showError":   true,
+		})
+	}
+}
 
 func main() {
 	var err error
@@ -243,6 +249,7 @@ func main() {
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/main", mainHandler)
+	http.HandleFunc("/sendmail", sendMailHandler)
 	http.ListenAndServe(":8080", nil)
 	fmt.Println("Success", client.Head)
 }
